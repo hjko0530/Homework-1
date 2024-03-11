@@ -76,29 +76,93 @@ contract NFinTech is IERC721 {
 
     function setApprovalForAll(address operator, bool approved) external {
         // TODO: please add your implementaiton here
+        require(msg.sender != operator, "NFinTech: setting approval status for self");
+        require(operator !=address(0), "NFinTech: can't set approval status for empty address");
+        _operatorApproval[msg.sender][operator] = approved;
+        emit ApprovalForAll(msg.sender, operator, approved);
     }
 
     function isApprovedForAll(address owner, address operator) public view returns (bool) {
         // TODO: please add your implementaiton here
+        if(operator ==address(0)||owner == address(0)) revert ZeroAddress();
+        return _operatorApproval[owner][operator];
     }
 
     function approve(address to, uint256 tokenId) external {
         // TODO: please add your implementaiton here
+        address owner = _owner[tokenId];
+        require(to != owner, "NFinTech: approval to current owner");
+        require(msg.sender == owner || isApprovedForAll(owner, msg.sender), "NFinTech: approve caller is not owner nor approved for all");
+        _tokenApproval[tokenId] = to;
+        emit Approval(owner, to, tokenId);
     }
 
     function getApproved(uint256 tokenId) public view returns (address operator) {
         // TODO: please add your implementaiton here
+        require(_owner[tokenId] != address(0), "NFinTech: approved query for nonexistent token");
+        return _tokenApproval[tokenId];
     }
 
     function transferFrom(address from, address to, uint256 tokenId) public {
         // TODO: please add your implementaiton here
+        require(_isApprovedOrOwner(msg.sender, tokenId), "NFinTech: transfer caller is not owner nor approved");
+        _transfer(from, to, tokenId);
     }
 
     function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) public {
         // TODO: please add your implementaiton here
+        transferFrom(from, to, tokenId);
+        require(_checkOnERC721Received(from, to, tokenId, data), "NFinTech: transfer to non ERC721Receiver implementer");
     }
 
     function safeTransferFrom(address from, address to, uint256 tokenId) public {
         // TODO: please add your implementaiton here
+        transferFrom(from, to, tokenId);
+        require(_checkOnERC721Received(from, to, tokenId, bytes("")), "NFinTech: transfer to non ERC721Receiver implementer");
+
     }
+
+    function _isApprovedOrOwner(address spender, uint256 tokenId) private view returns (bool) {
+        require(_owner[tokenId] != address(0), "NFinTech: operator query for nonexistent token");
+        address owner = _owner[tokenId];
+        return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
+    }
+
+    function _transfer(address from, address to, uint256 tokenId) private {
+        require(_owner[tokenId] == from, "NFinTech: transfer of token that is not own");
+        require(to != address(0), "NFinTech: transfer to the zero address");
+
+        // Clear approvals from the previous owner
+        _approve(address(0), tokenId);
+
+        _balances[from] -= 1;
+        _balances[to] += 1;
+        _owner[tokenId] = to;
+
+        emit Transfer(from, to, tokenId);
+    }
+
+    function _approve(address to, uint256 tokenId) private {
+        _tokenApproval[tokenId] = to;
+        emit Approval(_owner[tokenId], to, tokenId);
+    }
+
+    function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory data)private returns (bool){
+        if (to.code.length > 0) {
+            try IERC721TokenReceiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 retval) {
+                return retval == IERC721TokenReceiver.onERC721Received.selector;
+            } catch (bytes memory reason) {
+                if (reason.length == 0) {
+                    revert("NFinTech: transfer to non ERC721Receiver implementer");
+                } else {
+                    assembly {
+                        revert(add(32, reason), mload(reason))
+                    }
+                }
+            }
+        } else {
+            return true;
+        }
+    }    
+
 }
